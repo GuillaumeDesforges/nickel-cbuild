@@ -2,5 +2,5 @@
 
 ```bash
 cbuild init
-cbuild build
+cbuild build ".hello"
 ```

@@ -12,6 +12,8 @@ scripts = { cbuild = "cbuild.cli:cli" }
 python = "^3.12"
 click = "^8.1.7"
 httpx = "^0.27.0"
+pydantic = "^2.7.4"
+docker = "^7.1.0"
 
 
 [tool.poetry.group.dev.dependencies]

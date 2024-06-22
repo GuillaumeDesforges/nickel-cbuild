@@ -8,11 +8,11 @@
       system
         | String
         | doc "System to build the output for",
-      program
+      executable
         | String
-        | doc "Executable to build the output with",
+        | doc "Executable to run to build the output",
       args
         | Array String
-        | doc "Arguments to pass to the executable used to build",
+        | doc "Arguments to pass to the executable",
     }
 }

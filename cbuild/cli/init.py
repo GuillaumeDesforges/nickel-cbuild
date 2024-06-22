@@ -1,22 +1,12 @@
-import sys
 import shutil
-import click
 import pathlib
 import httpx
 import tarfile
+from .cli import cli, echo
 
 TARBALL_URL = (
     "https://api.github.com/repos/GuillaumeDesforges/nickel-cbuild/tarball/master"
 )
-
-
-def echo(msg: str):
-    print(msg, file=sys.stderr)
-
-
-@click.group()
-def cli():
-    pass
 
 
 @cli.command()
