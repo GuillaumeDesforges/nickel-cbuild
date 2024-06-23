@@ -20,7 +20,15 @@ class RecipeJson(pydantic.BaseModel):
 
 @cli.command()
 @click.argument("field", type=str)
-def build(field: str):
+@click.option(
+    "--keep",
+    is_flag=True,
+    help="Keep the container after building. Useful for debugging.",
+)
+def build(
+    field: str,
+    keep: bool,
+):
     cwd = pathlib.Path(".")
     cbuild_file = cwd / "cbuild.ncl"
     nickel_result = subprocess.run(
@@ -64,6 +72,7 @@ def build(field: str):
         docker_client=docker_client,
         builder_image="alpine",
         store=store,
+        keep=keep,
     )
 
     echo("Build complete.")

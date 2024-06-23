@@ -1,31 +1,14 @@
+import contextlib
+import tarfile
 from cbuild.recipe import Recipe
 import docker.types
+import docker.models.containers
 import grp
 import hashlib
 import logging
 import os
 import pwd
 import subprocess
-
-
-class UnixUser:
-    """
-    Context manager to temporarily change the UID and GID of the current process.
-    """
-
-    def __init__(self, uid: int, gid: int | None = None):
-        self.uid = uid
-        self.gid = gid
-
-    def __enter__(self):
-        self.main_uid, self.main_gid = os.getuid(), os.getgid()
-        if self.gid is not None:
-            os.setgid(self.gid)
-        os.setuid(self.uid)
-
-    def __exit__(self, *_):
-        os.setuid(self.main_uid)
-        os.setgid(self.main_gid)
 
 
 class Store:
@@ -65,12 +48,6 @@ class Store:
             useradd_result = subprocess.run(["sudo", "useradd", self.user])
             useradd_result.check_returncode()
 
-    def in_store_user(self):
-        return UnixUser(
-            pwd.getpwnam(self.user).pw_uid,
-            grp.getgrnam(self.user).gr_gid,
-        )
-
     def _create_store(self):
         """
         Create the store directory if it doesn't exist.
@@ -86,6 +63,10 @@ class Store:
             ["sudo", "chown", f"{self.user}:{self.user}", self.store_path],
         )
         chown_result.check_returncode()
+        chmod_result = subprocess.run(
+            ["sudo", "chmod", "777", self.store_path],
+        )
+        chmod_result.check_returncode()
 
     def get_output_path(
         self,
@@ -99,8 +80,29 @@ class Store:
         Args:
             recipe: Recipe to get the output path for.
         """
-        recipe_hash = hashlib.sha256(repr(recipe).encode()).hexdigest()
+        recipe_hash = hashlib.sha256(repr(recipe).encode()).hexdigest()[:32]
         return f"{self.store_path}/{recipe_hash}-{recipe.name}"
+
+
+@contextlib.contextmanager
+def managed_container(
+    container: docker.models.containers.Container,
+    remove: bool,
+):
+    """
+    Context manager to start, stop and remove a container when done.
+
+    Args:
+        container: Container to remove.
+        remove: Whether to remove the container when done.
+    """
+    try:
+        container.start()
+        yield
+    finally:
+        container.stop()
+        if remove:
+            container.remove()
 
 
 def build_recipe(
@@ -108,6 +110,7 @@ def build_recipe(
     docker_client: docker.DockerClient,
     builder_image: str,
     store: Store,
+    keep: bool,
 ):
     """
     Build a recipe in a container and copy the result to the store.
@@ -117,6 +120,7 @@ def build_recipe(
         docker_client: Docker client to use.
         builder_image: Image to use for building.
         store: Store to copy the result to.
+        keep: Whether to keep the container after building. Useful for debugging.
     """
     output_path = store.get_output_path(recipe)
 
@@ -130,17 +134,19 @@ def build_recipe(
         tty=True,
         detach=True,
     )
-    container.start()
-    container.exec_run(cmd=["mkdir", output_path])
-    container.exec_run(cmd=[recipe.executable] + recipe.args)
-    container.stop()
+    with managed_container(container, remove=not keep):
+        container.exec_run(cmd=["mkdir", "-p", output_path])
+        container.exec_run(cmd=[recipe.executable] + recipe.args)
 
-    # copy result to store
-    with store.in_store_user():
-        os.makedirs(os.path.dirname(output_path), exist_ok=True)
-        with open(output_path, "w") as f:
+        # copy result to store
+        output_tar_path = output_path + ".tar"
+        with open(output_tar_path, "wb") as f:
             raw_stream_chunks, archive_stats = container.get_archive(output_path)
             for chunk in raw_stream_chunks:
                 f.write(chunk)
 
-    container.remove()
+    # extract the archive (output directory is in the tar)
+    tarfile.open(output_tar_path).extractall(store.store_path)
+
+    # remove the archive
+    os.remove(output_tar_path)
