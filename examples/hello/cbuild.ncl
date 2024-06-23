@@ -4,6 +4,6 @@ let { Recipe } = import ".cbuild/nickel/lib/recipe.ncl" in
       name = "hello",
       system = "x86_64_linux",
       executable = "/bin/sh",
-      args = ["-c", "echo hello world > $out"],
+      args = ["-c", "echo hello world > $out/hello.txt"],
     },
 }
