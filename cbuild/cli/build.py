@@ -1,10 +1,12 @@
 import pathlib
 import subprocess
 import sys
+import docker
 import pydantic
 
 import click
 
+from cbuild.builder import Store, build_recipe
 from cbuild.recipe import Recipe
 from .cli import cli, echo
 
@@ -51,3 +53,17 @@ def build(field: str):
         executable=parsed_recipe_json.executable,
         args=parsed_recipe_json.args,
     )
+
+    echo("Initializing build.")
+    docker_client = docker.from_env()
+    store = Store()
+
+    echo("Building recipe.")
+    build_recipe(
+        recipe=recipe,
+        docker_client=docker_client,
+        builder_image="alpine",
+        store=store,
+    )
+
+    echo("Build complete.")
